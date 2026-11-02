@@ -1,6 +1,6 @@
 {
-  "name": "CreatorSpark AI",
-  "description": "The ultimate creative playground for YouTubers: Generate 10 viral titles, 3 thumbnail ideas, video hooks, descriptions, hashtags, and explore the 30-year Creator Evolution.",
+  "name": "CyberSurge: Neon Endless Runner",
+  "description": "High-octane 3D endless runner inspired by Subway Surfers and Temple Run. Dash across 3 lanes, leap over barriers, slide under lasers, surf on trains, and collect coins in a vibrant cyberpunk world.",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

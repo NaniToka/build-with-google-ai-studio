@@ -1,0 +1,8 @@
+{
+  "name": "CreatorSpark AI",
+  "description": "The ultimate creative playground for YouTubers: Generate 10 viral titles, 3 thumbnail ideas, video hooks, descriptions, hashtags, and explore the 30-year Creator Evolution.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

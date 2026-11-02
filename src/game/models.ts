@@ -36,7 +36,8 @@ export class ModelFactory {
     return texture;
   }
 
-  // 1. Hero Cyber Runner (Multi-part rigged group with 12 distinct components)
+  // 1. MOTU RUNNER MODEL (From Motu Patlu)
+  // Procedural 18-part rigged composite character with potbelly, moustache, kurta, choti & mojari shoes
   public static createRunner(): {
     root: THREE.Group;
     spine: THREE.Group;
@@ -45,170 +46,274 @@ export class ModelFactory {
     rightLeg: THREE.Group;
     leftArm: THREE.Group;
     rightArm: THREE.Group;
+    belly: THREE.Mesh;
     shieldMesh: THREE.Mesh;
     magnetRing: THREE.Mesh;
     hoverboard: THREE.Group;
+    samosaAura: THREE.Mesh;
   } {
     const root = new THREE.Group();
-    root.name = 'Runner';
+    root.name = 'MotuRunner';
 
-    // Materials with varied roughness and metalness
-    const suitMat = new THREE.MeshStandardMaterial({
-      color: 0x0f172a, // Deep slate tech fabric
+    // Materials with PBR variation
+    const skinMat = new THREE.MeshStandardMaterial({
+      color: 0xdf9f71, // Warm Indian skin tone
+      roughness: 0.65,
+      metalness: 0.05,
+    });
+
+    const redKurtaMat = new THREE.MeshStandardMaterial({
+      color: 0xdc2626, // Motu's signature rich red vest / sleeveless kurta
+      roughness: 0.45,
+      metalness: 0.15,
+    });
+
+    const yellowShirtMat = new THREE.MeshStandardMaterial({
+      color: 0xfef08a, // Warm yellow/cream undershirt over big belly
       roughness: 0.7,
+      metalness: 0.05,
+    });
+
+    const bluePantsMat = new THREE.MeshStandardMaterial({
+      color: 0x2563eb, // Motu's iconic royal blue salwar/pajama pants
+      roughness: 0.6,
       metalness: 0.1,
     });
 
-    const armorMat = new THREE.MeshStandardMaterial({
-      color: 0xef4444, // Vibrant crimson armor plates
-      roughness: 0.35,
-      metalness: 0.8,
-    });
-
-    const visorMat = new THREE.MeshPhysicalMaterial({
-      color: 0x00f5ff, // Cyber cyan visor
-      roughness: 0.1,
-      metalness: 0.9,
-      emissive: 0x0099cc,
-      emissiveIntensity: 0.6,
-      clearcoat: 1.0,
-      clearcoatRoughness: 0.1,
-    });
-
-    const glowNeonMat = new THREE.MeshStandardMaterial({
-      color: 0x38bdf8,
-      emissive: 0x0284c7,
-      emissiveIntensity: 0.9,
-      roughness: 0.2,
-      metalness: 0.5,
-    });
-
-    const shoeMat = new THREE.MeshStandardMaterial({
-      color: 0xffffff,
-      roughness: 0.4,
+    const hairMat = new THREE.MeshStandardMaterial({
+      color: 0x09090b, // Deep black for moustache and hair tuft (choti)
+      roughness: 0.3,
       metalness: 0.2,
     });
 
-    // Spine & Torso Group (Pivoted at hip height = 0.95m)
+    const eyeWhiteMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    const eyePupilMat = new THREE.MeshBasicMaterial({ color: 0x09090b });
+
+    const goldMat = new THREE.MeshStandardMaterial({
+      color: 0xf59e0b,
+      metalness: 0.8,
+      roughness: 0.2,
+    });
+
+    const mojariMat = new THREE.MeshStandardMaterial({
+      color: 0x78350f, // Warm traditional brown leather mojari shoes
+      roughness: 0.5,
+      metalness: 0.3,
+    });
+
+    // Spine & Hip Group (Pivoted at hip height = 0.85m)
     const spine = new THREE.Group();
-    spine.position.y = 0.95;
+    spine.position.y = 0.85;
     root.add(spine);
 
-    // Torso Base
-    const torsoGeo = new THREE.BoxGeometry(0.48, 0.55, 0.3);
-    const torso = new THREE.Mesh(torsoGeo, suitMat);
-    torso.position.y = 0.28;
-    torso.castShadow = true;
-    spine.add(torso);
+    // MOTU'S BIG ROUND POTBELLY (Yellow shirt)
+    const bellyGeo = new THREE.SphereGeometry(0.38, 20, 20);
+    bellyGeo.scale(1.15, 1.05, 1.25);
+    const belly = new THREE.Mesh(bellyGeo, yellowShirtMat);
+    belly.position.set(0, 0.28, 0.14);
+    belly.castShadow = true;
+    spine.add(belly);
 
-    // Chestplate Armor
-    const chestGeo = new THREE.BoxGeometry(0.52, 0.32, 0.12);
-    const chest = new THREE.Mesh(chestGeo, armorMat);
-    chest.position.set(0, 0.34, 0.12);
-    chest.castShadow = true;
-    spine.add(chest);
+    // Torso Core Frame
+    const torsoCore = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.32, 0.35, 0.55, 16),
+      yellowShirtMat
+    );
+    torsoCore.position.y = 0.28;
+    torsoCore.castShadow = true;
+    spine.add(torsoCore);
 
-    // Cyber Reactor Core
-    const coreGeo = new THREE.CylinderGeometry(0.06, 0.06, 0.05, 16);
-    coreGeo.rotateX(Math.PI / 2);
-    const core = new THREE.Mesh(coreGeo, glowNeonMat);
-    core.position.set(0, 0.34, 0.19);
-    spine.add(core);
+    // RED SLEEVELESS KURTA / VEST OVER SHOULDERS & SIDES
+    const vestBack = new THREE.Mesh(
+      new THREE.BoxGeometry(0.66, 0.55, 0.24),
+      redKurtaMat
+    );
+    vestBack.position.set(0, 0.3, -0.06);
+    vestBack.castShadow = true;
+    spine.add(vestBack);
 
-    // Jetpack / Backpack
-    const packGeo = new THREE.BoxGeometry(0.36, 0.42, 0.18);
-    const backpack = new THREE.Mesh(packGeo, armorMat);
-    backpack.position.set(0, 0.32, -0.2);
-    backpack.castShadow = true;
-    spine.add(backpack);
+    // Left & Right Kurta Flaps framing the big belly
+    const vestFlapL = new THREE.Mesh(
+      new THREE.BoxGeometry(0.18, 0.5, 0.3),
+      redKurtaMat
+    );
+    vestFlapL.position.set(-0.31, 0.28, 0.1);
+    vestFlapL.castShadow = true;
+    const vestFlapR = new THREE.Mesh(
+      new THREE.BoxGeometry(0.18, 0.5, 0.3),
+      redKurtaMat
+    );
+    vestFlapR.position.set(0.31, 0.28, 0.1);
+    vestFlapR.castShadow = true;
+    spine.add(vestFlapL, vestFlapR);
 
-    // Dual Thruster Nozzles
-    const nozzleGeo = new THREE.CylinderGeometry(0.05, 0.07, 0.12, 12);
-    const nozzleL = new THREE.Mesh(nozzleGeo, glowNeonMat);
-    nozzleL.position.set(-0.11, 0.1, -0.2);
-    const nozzleR = new THREE.Mesh(nozzleGeo, glowNeonMat);
-    nozzleR.position.set(0.11, 0.1, -0.2);
-    spine.add(nozzleL, nozzleR);
+    // Gold Kurta Buttons on belly
+    [-0.04, 0.12, 0.28].forEach((btnY) => {
+      const btn = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.025, 0.025, 0.02, 8),
+        goldMat
+      );
+      btn.rotateX(Math.PI / 2);
+      btn.position.set(0, btnY, 0.56);
+      spine.add(btn);
+    });
 
-    // Head Group (Pivoted at neck)
+    // HEAD GROUP (Pivoted at neck = 0.62m)
     const head = new THREE.Group();
-    head.position.set(0, 0.6, 0);
+    head.position.set(0, 0.62, 0.05);
     spine.add(head);
 
-    // Helmet
-    const helmetGeo = new THREE.SphereGeometry(0.2, 16, 16);
-    helmetGeo.scale(1, 1.15, 1.05);
-    const helmet = new THREE.Mesh(helmetGeo, suitMat);
-    helmet.position.y = 0.18;
-    helmet.castShadow = true;
-    head.add(helmet);
+    // Chubby Round Head
+    const headGeo = new THREE.SphereGeometry(0.28, 20, 20);
+    headGeo.scale(1.15, 1.1, 1.1);
+    const headMesh = new THREE.Mesh(headGeo, skinMat);
+    headMesh.position.y = 0.2;
+    headMesh.castShadow = true;
+    head.add(headMesh);
 
-    // Curved Visor
-    const visorGeo = new THREE.BoxGeometry(0.32, 0.14, 0.14);
-    const visor = new THREE.Mesh(visorGeo, visorMat);
-    visor.position.set(0, 0.2, 0.14);
-    head.add(visor);
+    // Chubby Cheeks
+    const cheekL = new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 12), skinMat);
+    cheekL.position.set(-0.2, 0.15, 0.14);
+    const cheekR = new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 12), skinMat);
+    cheekR.position.set(0.2, 0.15, 0.14);
+    head.add(cheekL, cheekR);
 
-    // Left Arm (Pivoted at shoulder)
+    // Round Bulbous Nose
+    const nose = new THREE.Mesh(new THREE.SphereGeometry(0.08, 12, 12), skinMat);
+    nose.position.set(0, 0.2, 0.32);
+    head.add(nose);
+
+    // MOTU'S SIGNATURE THICK BLACK CURVED MOUSTACHE
+    const moustGeo = new THREE.TorusGeometry(0.14, 0.04, 8, 16, Math.PI * 0.9);
+    const moustL = new THREE.Mesh(moustGeo, hairMat);
+    moustL.rotation.set(0.1, 0.2, -Math.PI / 4);
+    moustL.position.set(-0.11, 0.14, 0.28);
+    const moustR = new THREE.Mesh(moustGeo, hairMat);
+    moustR.rotation.set(0.1, -0.2, Math.PI / 4 + Math.PI);
+    moustR.position.set(0.11, 0.14, 0.28);
+    head.add(moustL, moustR);
+
+    // Cheerful Smile Line
+    const mouth = new THREE.Mesh(
+      new THREE.TorusGeometry(0.08, 0.02, 6, 12, Math.PI * 0.7),
+      new THREE.MeshBasicMaterial({ color: 0x831843 })
+    );
+    mouth.rotation.set(0, 0, -Math.PI * 0.85);
+    mouth.position.set(0, 0.09, 0.28);
+    head.add(mouth);
+
+    // Big Expressive Cartoon Eyes
+    const eyeGeo = new THREE.SphereGeometry(0.065, 12, 12);
+    eyeGeo.scale(1, 1.25, 0.8);
+    const eyeL = new THREE.Mesh(eyeGeo, eyeWhiteMat);
+    eyeL.position.set(-0.11, 0.26, 0.27);
+    const eyeR = new THREE.Mesh(eyeGeo, eyeWhiteMat);
+    eyeR.position.set(0.11, 0.26, 0.27);
+
+    const pupilGeo = new THREE.SphereGeometry(0.035, 8, 8);
+    const pupilL = new THREE.Mesh(pupilGeo, eyePupilMat);
+    pupilL.position.set(-0.11, 0.26, 0.32);
+    const pupilR = new THREE.Mesh(pupilGeo, eyePupilMat);
+    pupilR.position.set(0.11, 0.26, 0.32);
+
+    head.add(eyeL, eyeR, pupilL, pupilR);
+
+    // Black Eyebrows
+    const browGeo = new THREE.BoxGeometry(0.12, 0.028, 0.02);
+    const browL = new THREE.Mesh(browGeo, hairMat);
+    browL.rotation.z = 0.2;
+    browL.position.set(-0.12, 0.36, 0.28);
+    const browR = new THREE.Mesh(browGeo, hairMat);
+    browR.rotation.z = -0.2;
+    browR.position.set(0.12, 0.36, 0.28);
+    head.add(browL, browR);
+
+    // Ears
+    const earGeo = new THREE.SphereGeometry(0.07, 8, 8);
+    const earL = new THREE.Mesh(earGeo, skinMat);
+    earL.position.set(-0.32, 0.2, 0);
+    const earR = new THREE.Mesh(earGeo, skinMat);
+    earR.position.set(0.32, 0.2, 0);
+    head.add(earL, earR);
+
+    // MOTU'S ICONIC CHOTI / TOPKNOT HAIR TUFT ON BALD HEAD
+    const chotiGeo = new THREE.ConeGeometry(0.045, 0.16, 8);
+    const choti = new THREE.Mesh(chotiGeo, hairMat);
+    choti.position.set(0, 0.54, -0.05);
+    choti.rotation.x = -0.25;
+    head.add(choti);
+
+    // LEFT ARM (Plump, with red sleeve cuff)
     const leftArm = new THREE.Group();
-    leftArm.position.set(-0.32, 0.5, 0);
+    leftArm.position.set(-0.38, 0.5, 0);
     spine.add(leftArm);
-    const armL = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.5, 0.14), suitMat);
-    armL.position.y = -0.22;
+    const sleeveL = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.12, 0.14, 12), redKurtaMat);
+    sleeveL.position.y = -0.06;
+    const armL = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.09, 0.38, 12), skinMat);
+    armL.position.y = -0.25;
     armL.castShadow = true;
-    const handL = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), armorMat);
+    const handL = new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 10), skinMat);
     handL.position.y = -0.48;
-    leftArm.add(armL, handL);
+    leftArm.add(sleeveL, armL, handL);
 
-    // Right Arm (Pivoted at shoulder)
+    // RIGHT ARM (Plump, with red sleeve cuff)
     const rightArm = new THREE.Group();
-    rightArm.position.set(0.32, 0.5, 0);
+    rightArm.position.set(0.38, 0.5, 0);
     spine.add(rightArm);
-    const armR = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.5, 0.14), suitMat);
-    armR.position.y = -0.22;
+    const sleeveR = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.12, 0.14, 12), redKurtaMat);
+    sleeveR.position.y = -0.06;
+    const armR = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.09, 0.38, 12), skinMat);
+    armR.position.y = -0.25;
     armR.castShadow = true;
-    const handR = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), armorMat);
+    const handR = new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 10), skinMat);
     handR.position.y = -0.48;
-    rightArm.add(armR, handR);
+    rightArm.add(sleeveR, armR, handR);
 
-    // Left Leg (Pivoted at hip)
+    // LEFT LEG (Baggy Blue Salwar / Pajama + Brown Mojari Shoe)
     const leftLeg = new THREE.Group();
-    leftLeg.position.set(-0.16, 0.95, 0);
+    leftLeg.position.set(-0.2, 0.85, 0);
     root.add(leftLeg);
-    const thighL = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.5, 0.16), armorMat);
-    thighL.position.y = -0.25;
+    const thighL = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.15, 0.45, 12), bluePantsMat);
+    thighL.position.y = -0.22;
     thighL.castShadow = true;
-    const shinL = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.45, 0.14), suitMat);
-    shinL.position.y = -0.65;
-    shinL.castShadow = true;
-    const footL = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.12, 0.28), shoeMat);
-    footL.position.set(0, -0.9, 0.06);
-    footL.castShadow = true;
-    const soleL = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.03, 0.29), glowNeonMat);
-    soleL.position.set(0, -0.96, 0.06);
-    leftLeg.add(thighL, shinL, footL, soleL);
+    const calfL = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.12, 0.4, 12), bluePantsMat);
+    calfL.position.y = -0.58;
+    calfL.castShadow = true;
 
-    // Right Leg (Pivoted at hip)
+    // Traditional Mojari Shoe with curved pointed toe
+    const mojariL = new THREE.Group();
+    mojariL.position.set(0, -0.82, 0.06);
+    const shoeBodyL = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.12, 0.32), mojariMat);
+    const shoeToeL = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.15, 8), mojariMat);
+    shoeToeL.rotation.x = -Math.PI / 2.5;
+    shoeToeL.position.set(0, 0.04, 0.22);
+    mojariL.add(shoeBodyL, shoeToeL);
+    leftLeg.add(thighL, calfL, mojariL);
+
+    // RIGHT LEG (Baggy Blue Salwar / Pajama + Brown Mojari Shoe)
     const rightLeg = new THREE.Group();
-    rightLeg.position.set(0.16, 0.95, 0);
+    rightLeg.position.set(0.2, 0.85, 0);
     root.add(rightLeg);
-    const thighR = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.5, 0.16), armorMat);
-    thighR.position.y = -0.25;
+    const thighR = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.15, 0.45, 12), bluePantsMat);
+    thighR.position.y = -0.22;
     thighR.castShadow = true;
-    const shinR = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.45, 0.14), suitMat);
-    shinR.position.y = -0.65;
-    shinR.castShadow = true;
-    const footR = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.12, 0.28), shoeMat);
-    footR.position.set(0, -0.9, 0.06);
-    footR.castShadow = true;
-    const soleR = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.03, 0.29), glowNeonMat);
-    soleR.position.set(0, -0.96, 0.06);
-    rightLeg.add(thighR, shinR, footR, soleR);
+    const calfR = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.12, 0.4, 12), bluePantsMat);
+    calfR.position.y = -0.58;
+    calfR.castShadow = true;
 
-    // Shield Dome Mesh (Initially hidden)
-    const shieldGeo = new THREE.SphereGeometry(1.2, 24, 24);
+    const mojariR = new THREE.Group();
+    mojariR.position.set(0, -0.82, 0.06);
+    const shoeBodyR = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.12, 0.32), mojariMat);
+    const shoeToeR = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.15, 8), mojariMat);
+    shoeToeR.rotation.x = -Math.PI / 2.5;
+    shoeToeR.position.set(0, 0.04, 0.22);
+    mojariR.add(shoeBodyR, shoeToeR);
+    rightLeg.add(thighR, calfR, mojariR);
+
+    // SHIELD DOME (Emerald Green)
+    const shieldGeo = new THREE.SphereGeometry(1.25, 24, 24);
     const shieldMat = new THREE.MeshStandardMaterial({
-      color: 0x10b981, // Emerald green
+      color: 0x10b981,
       emissive: 0x059669,
       emissiveIntensity: 0.6,
       transparent: true,
@@ -222,8 +327,8 @@ export class ModelFactory {
     shieldMesh.visible = false;
     root.add(shieldMesh);
 
-    // Magnet Torus Field (Initially hidden)
-    const magnetGeo = new THREE.TorusGeometry(0.8, 0.04, 12, 32);
+    // MAGNET TORUS FIELD
+    const magnetGeo = new THREE.TorusGeometry(0.85, 0.04, 12, 32);
     const magnetMat = new THREE.MeshStandardMaterial({
       color: 0x3b82f6,
       emissive: 0x2563eb,
@@ -238,27 +343,34 @@ export class ModelFactory {
     magnetRing.visible = false;
     root.add(magnetRing);
 
-    // Cyber Hoverboard (Toggled during rocket / hover mode)
+    // HOVERBOARD / SAMOSA POWER ROCKET
     const hoverboard = new THREE.Group();
     hoverboard.position.y = 0.08;
-    const deckGeo = new THREE.BoxGeometry(0.65, 0.08, 1.4);
     const deckMat = new THREE.MeshStandardMaterial({
-      color: 0xa855f7,
+      color: 0xf59e0b,
       roughness: 0.3,
       metalness: 0.8,
-      emissive: 0x7e22ce,
-      emissiveIntensity: 0.4,
+      emissive: 0xd97706,
+      emissiveIntensity: 0.6,
     });
-    const deck = new THREE.Mesh(deckGeo, deckMat);
+    const deck = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.08, 1.4), deckMat);
     deck.castShadow = true;
-    const hoverGlow = new THREE.Mesh(
-      new THREE.BoxGeometry(0.6, 0.02, 1.3),
-      glowNeonMat
-    );
-    hoverGlow.position.y = -0.05;
-    hoverboard.add(deck, hoverGlow);
+    hoverboard.add(deck);
     hoverboard.visible = false;
     root.add(hoverboard);
+
+    // SAMOSA ENERGY AURA (Pulsing golden aura when Samosa Boost is active)
+    const auraGeo = new THREE.SphereGeometry(1.3, 16, 16);
+    const auraMat = new THREE.MeshBasicMaterial({
+      color: 0xffbb00,
+      transparent: true,
+      opacity: 0.35,
+      wireframe: true,
+    });
+    const samosaAura = new THREE.Mesh(auraGeo, auraMat);
+    samosaAura.position.y = 0.9;
+    samosaAura.visible = false;
+    root.add(samosaAura);
 
     return {
       root,
@@ -268,13 +380,58 @@ export class ModelFactory {
       rightLeg,
       leftArm,
       rightArm,
+      belly,
       shieldMesh,
       magnetRing,
       hoverboard,
+      samosaAura,
     };
   }
 
-  // 2. High-Speed MagLev Subway Train (3-12 parts)
+  // 2. MOTU'S GOLDEN CRISPY SAMOSA (Collectible & Power-Up)
+  public static createSamosa(): THREE.Group {
+    const group = new THREE.Group();
+    group.name = 'CrispySamosa';
+
+    const samosaMat = new THREE.MeshStandardMaterial({
+      color: 0xf59e0b, // Crispy fried golden brown
+      emissive: 0xb45309,
+      emissiveIntensity: 0.5,
+      roughness: 0.35,
+      metalness: 0.15,
+    });
+
+    const crustEdgeMat = new THREE.MeshStandardMaterial({
+      color: 0x92400e, // Deep browned fried crust edge
+      roughness: 0.5,
+    });
+
+    // Triangular Tetrahedron Shape for Samosa
+    const samosaGeo = new THREE.ConeGeometry(0.36, 0.45, 3);
+    samosaGeo.rotateX(Math.PI / 2);
+    const samosa = new THREE.Mesh(samosaGeo, samosaMat);
+    samosa.scale.set(1.2, 0.7, 1.0);
+    samosa.castShadow = true;
+    group.add(samosa);
+
+    // Crimped Pastry Fold Edge along base
+    const crimpGeo = new THREE.TorusGeometry(0.3, 0.04, 6, 12, Math.PI * 0.9);
+    const crimp = new THREE.Mesh(crimpGeo, crustEdgeMat);
+    crimp.rotation.x = Math.PI / 2;
+    crimp.position.set(0, -0.05, -0.15);
+    group.add(crimp);
+
+    // Golden Glow Ring
+    const glowGeo = new THREE.TorusGeometry(0.48, 0.025, 8, 20);
+    const glowMat = new THREE.MeshBasicMaterial({ color: 0xffd700 });
+    const glowRing = new THREE.Mesh(glowGeo, glowMat);
+    glowRing.rotation.x = Math.PI / 3;
+    group.add(glowRing);
+
+    return group;
+  }
+
+  // 3. High-Speed MagLev Subway Train
   public static createTrain(length = 26): THREE.Group {
     const train = new THREE.Group();
     train.name = 'MagLevTrain';
@@ -344,7 +501,7 @@ export class ModelFactory {
     hlR.position.set(0.7, 1.2, length / 2 + 2.55);
     train.add(hlL, hlR);
 
-    // Rooftop Walkway (so player can run smoothly on top!)
+    // Rooftop Walkway
     const roofWalkway = new THREE.Mesh(
       new THREE.BoxGeometry(width * 0.75, 0.12, length + 2),
       darkTrimMat
@@ -359,7 +516,7 @@ export class ModelFactory {
     windows.position.set(0, height * 0.65, 0);
     train.add(windows);
 
-    // Rear Entrance Ramp (helps jump up onto train roof from behind)
+    // Rear Entrance Ramp
     const rampGeo = new THREE.BoxGeometry(width * 0.8, 0.8, 2.2);
     rampGeo.rotateX(-0.35);
     const ramp = new THREE.Mesh(rampGeo, darkTrimMat);
@@ -382,7 +539,7 @@ export class ModelFactory {
     return train;
   }
 
-  // 3. High Laser Barricade (Slide Underneath Required)
+  // 4. High Laser Barricade (Slide Underneath Required)
   public static createHighLaserBarricade(): THREE.Group {
     const group = new THREE.Group();
     group.name = 'HighLaserBarricade';
@@ -401,10 +558,9 @@ export class ModelFactory {
     const laserMat = new THREE.MeshBasicMaterial({
       color: 0xff0055,
       transparent: true,
-      opacity: 0.8,
+      opacity: 0.85,
     });
 
-    // Left and Right support posts
     const postGeo = new THREE.BoxGeometry(0.35, 3.2, 0.35);
     const postL = new THREE.Mesh(postGeo, pillarMat);
     postL.position.set(-1.4, 1.6, 0);
@@ -414,42 +570,28 @@ export class ModelFactory {
     postR.castShadow = true;
     group.add(postL, postR);
 
-    // Overhead Heavy Beam (at height 2.2m to 2.8m)
+    // Overhead Heavy Beam (Gap is 1.0m from ground — Motu rolls under!)
     const beamGeo = new THREE.BoxGeometry(3.1, 0.6, 0.45);
     const beam = new THREE.Mesh(beamGeo, hazardMat);
     beam.position.set(0, 2.5, 0);
     beam.castShadow = true;
     group.add(beam);
 
-    // Pulsing Laser Curtain (from height 1.0m to 2.2m — leaving 1.0m gap at bottom to slide!)
     const laserGeo = new THREE.PlaneGeometry(2.7, 1.2);
     const laser = new THREE.Mesh(laserGeo, laserMat);
     laser.position.set(0, 1.6, 0);
     group.add(laser);
 
-    // Warning Beacons on Top
-    const beaconGeo = new THREE.CylinderGeometry(0.08, 0.08, 0.2, 8);
-    const beaconMat = new THREE.MeshStandardMaterial({
-      color: 0xff0033,
-      emissive: 0xff0033,
-      emissiveIntensity: 1.2,
-    });
-    const beaconL = new THREE.Mesh(beaconGeo, beaconMat);
-    beaconL.position.set(-1.2, 2.9, 0);
-    const beaconR = new THREE.Mesh(beaconGeo, beaconMat);
-    beaconR.position.set(1.2, 2.9, 0);
-    group.add(beaconL, beaconR);
-
     return group;
   }
 
-  // 4. Low Barricade / Roadblock (Jump Over Required)
+  // 5. Low Barricade / Roadblock (Jump Over Required)
   public static createLowBarricade(): THREE.Group {
     const group = new THREE.Group();
     group.name = 'LowBarricade';
 
     const barrierMat = new THREE.MeshStandardMaterial({
-      color: 0xe11d48, // Rose red barrier
+      color: 0xe11d48,
       roughness: 0.4,
       metalness: 0.6,
     });
@@ -466,7 +608,6 @@ export class ModelFactory {
       roughness: 0.2,
     });
 
-    // Concrete Footers
     const footGeo = new THREE.BoxGeometry(0.4, 0.2, 0.7);
     const footL = new THREE.Mesh(footGeo, barrierMat);
     footL.position.set(-1.1, 0.1, 0);
@@ -476,14 +617,12 @@ export class ModelFactory {
     footR.castShadow = true;
     group.add(footL, footR);
 
-    // Main Horizontal Crossbar (Height = 0.85m)
     const barGeo = new THREE.BoxGeometry(2.6, 0.55, 0.25);
     const bar = new THREE.Mesh(barGeo, hazardMat);
     bar.position.set(0, 0.6, 0);
     bar.castShadow = true;
     group.add(bar);
 
-    // Neon Warning Light Strip
     const lightStrip = new THREE.Mesh(
       new THREE.BoxGeometry(2.5, 0.08, 0.27),
       glowBarMat
@@ -494,7 +633,7 @@ export class ModelFactory {
     return group;
   }
 
-  // 5. Tall Signal Column (Full Lane Blocker)
+  // 6. Tall Signal Column
   public static createTallPillar(): THREE.Group {
     const group = new THREE.Group();
     group.name = 'TallPillar';
@@ -518,7 +657,6 @@ export class ModelFactory {
     col.castShadow = true;
     group.add(col);
 
-    // Flashing Arrow Signal
     const signGeo = new THREE.BoxGeometry(0.9, 0.9, 0.3);
     const sign = new THREE.Mesh(signGeo, neonMat);
     sign.position.set(0, 3.2, 0.35);
@@ -527,7 +665,7 @@ export class ModelFactory {
     return group;
   }
 
-  // 6. Gold Cyber-Coin
+  // 7. Gold Cyber-Coin
   public static createCoin(): THREE.Group {
     const group = new THREE.Group();
     group.name = 'Coin';
@@ -548,14 +686,12 @@ export class ModelFactory {
       roughness: 0.2,
     });
 
-    // Outer Coin Rim
     const coinGeo = new THREE.CylinderGeometry(0.4, 0.4, 0.08, 16);
     coinGeo.rotateX(Math.PI / 2);
     const coin = new THREE.Mesh(coinGeo, goldMat);
     coin.castShadow = true;
     group.add(coin);
 
-    // Inner Embossed Star / Hex Core
     const innerGeo = new THREE.CylinderGeometry(0.24, 0.24, 0.1, 6);
     innerGeo.rotateX(Math.PI / 2);
     const inner = new THREE.Mesh(innerGeo, coreMat);
@@ -564,8 +700,12 @@ export class ModelFactory {
     return group;
   }
 
-  // 7. Power-up Collectibles
-  public static createPowerup(type: 'magnet' | 'shield' | 'boost' | 'multiplier'): THREE.Group {
+  // 8. Power-up Collectibles (Including Hot Crispy Samosa!)
+  public static createPowerup(type: 'magnet' | 'shield' | 'boost' | 'multiplier' | 'samosa'): THREE.Group {
+    if (type === 'samosa' || type === 'boost') {
+      return this.createSamosa();
+    }
+
     const group = new THREE.Group();
     group.name = `Powerup_${type}`;
 
@@ -583,7 +723,6 @@ export class ModelFactory {
         emissiveIntensity: 0.8,
       });
 
-      // U-Shape Torus Slice
       const arch = new THREE.Mesh(
         new THREE.TorusGeometry(0.35, 0.1, 12, 16, Math.PI),
         magMat
@@ -611,20 +750,6 @@ export class ModelFactory {
       const ring = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.04, 8, 24), ringMat);
       ring.rotation.x = Math.PI / 3;
       group.add(crystal, ring);
-    } else if (type === 'boost') {
-      const rocketMat = new THREE.MeshStandardMaterial({
-        color: 0xa855f7,
-        emissive: 0x7e22ce,
-        emissiveIntensity: 0.7,
-        roughness: 0.2,
-        metalness: 0.8,
-      });
-      const flameMat = new THREE.MeshBasicMaterial({ color: 0xf59e0b });
-      const rocket = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.65, 12), rocketMat);
-      rocket.rotation.z = Math.PI;
-      const flame = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.35, 8), flameMat);
-      flame.position.y = 0.45;
-      group.add(rocket, flame);
     } else {
       // 2X Multiplier Star
       const starMat = new THREE.MeshStandardMaterial({
@@ -641,26 +766,28 @@ export class ModelFactory {
     return group;
   }
 
-  // 8. Chasing Drone ("The Enforcer" - Security Drone trailing behind)
+  // 9. INSPECTOR CHINGUM'S POLICE DRONE
+  // Trailing police quadcopter with red/blue flashing lights and police badge
   public static createChasingDrone(): {
     root: THREE.Group;
     rotors: THREE.Mesh[];
     searchlight: THREE.SpotLight;
-    siren: THREE.Mesh;
+    sirenL: THREE.Mesh;
+    sirenR: THREE.Mesh;
   } {
     const root = new THREE.Group();
-    root.name = 'ChasingDrone';
+    root.name = 'ChingumPoliceDrone';
 
-    const droneMat = new THREE.MeshStandardMaterial({
-      color: 0x0f172a,
-      roughness: 0.4,
-      metalness: 0.8,
+    const policeBodyMat = new THREE.MeshStandardMaterial({
+      color: 0x1e3a8a, // Police navy blue
+      roughness: 0.35,
+      metalness: 0.7,
     });
 
-    const armorMat = new THREE.MeshStandardMaterial({
-      color: 0xe11d48, // Crimson warning stripes
+    const whiteMat = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
       roughness: 0.3,
-      metalness: 0.6,
+      metalness: 0.3,
     });
 
     const rotorMat = new THREE.MeshStandardMaterial({
@@ -669,64 +796,69 @@ export class ModelFactory {
       metalness: 0.9,
     });
 
-    const sirenMat = new THREE.MeshBasicMaterial({ color: 0xff0033 });
-
     // Center Pod Body
-    const body = new THREE.Mesh(new THREE.SphereGeometry(0.45, 16, 16), droneMat);
-    body.scale.set(1.2, 0.7, 1.4);
+    const body = new THREE.Mesh(new THREE.SphereGeometry(0.48, 16, 16), policeBodyMat);
+    body.scale.set(1.2, 0.75, 1.4);
     body.castShadow = true;
     root.add(body);
 
-    // Front Optical Eye / Visor
-    const eye = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.18, 0.18, 0.1, 16),
-      new THREE.MeshBasicMaterial({ color: 0x00f5ff })
+    // Police White Chevron Stripe on sides
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(1.25, 0.12, 1.1), whiteMat);
+    stripe.position.set(0, 0.05, 0);
+    root.add(stripe);
+
+    // Police Gold Badge in front
+    const badge = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.12, 0.12, 0.04, 8),
+      new THREE.MeshStandardMaterial({ color: 0xf59e0b, metalness: 0.9, roughness: 0.2 })
     );
-    eye.rotateX(Math.PI / 2);
-    eye.position.set(0, 0, 0.55);
-    root.add(eye);
+    badge.rotateX(Math.PI / 2);
+    badge.position.set(0, 0.1, 0.65);
+    root.add(badge);
 
     // 4 Quadrotor Arms & Blades
     const rotors: THREE.Mesh[] = [];
     const offsets = [
-      [-0.7, 0.1, 0.6],
-      [0.7, 0.1, 0.6],
-      [-0.7, 0.1, -0.6],
-      [0.7, 0.1, -0.6],
+      [-0.72, 0.1, 0.6],
+      [0.72, 0.1, 0.6],
+      [-0.72, 0.1, -0.6],
+      [0.72, 0.1, -0.6],
     ];
 
     offsets.forEach(([x, y, z]) => {
-      // Arm spar
-      const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.8, 8), droneMat);
+      const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.8, 8), policeBodyMat);
       arm.position.set(x * 0.5, y, z * 0.5);
       arm.lookAt(x, y, z);
       arm.rotateX(Math.PI / 2);
       root.add(arm);
 
-      // Motor Pod
-      const motor = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.14, 12), armorMat);
+      const motor = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.14, 12), whiteMat);
       motor.position.set(x, y + 0.05, z);
       root.add(motor);
 
-      // Spinning Rotor Blade
-      const blade = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.015, 0.08), rotorMat);
+      const blade = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.015, 0.08), rotorMat);
       blade.position.set(x, y + 0.13, z);
       root.add(blade);
       rotors.push(blade);
     });
 
-    // Top Siren Light
-    const siren = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.16, 12), sirenMat);
-    siren.position.set(0, 0.42, 0);
-    root.add(siren);
+    // Dual Police Sirens (Red & Blue flashing)
+    const sirenRedMat = new THREE.MeshBasicMaterial({ color: 0xef4444 });
+    const sirenBlueMat = new THREE.MeshBasicMaterial({ color: 0x3b82f6 });
+
+    const sirenL = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.16, 12), sirenRedMat);
+    sirenL.position.set(-0.2, 0.44, 0);
+    const sirenR = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.16, 12), sirenBlueMat);
+    sirenR.position.set(0.2, 0.44, 0);
+    root.add(sirenL, sirenR);
 
     // Forward Searchlight
-    const searchlight = new THREE.SpotLight(0x00f5ff, 2.5, 30, Math.PI / 6, 0.4, 1.2);
+    const searchlight = new THREE.SpotLight(0x00f5ff, 3.0, 35, Math.PI / 6, 0.4, 1.2);
     searchlight.position.set(0, 0, 0.4);
     searchlight.target.position.set(0, -1.2, 8);
     root.add(searchlight);
     root.add(searchlight.target);
 
-    return { root, rotors, searchlight, siren };
+    return { root, rotors, searchlight, sirenL, sirenR };
   }
 }

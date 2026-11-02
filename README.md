@@ -1,22 +1,36 @@
-# CyberSurge: Neon Endless Runner ⚡🏃‍♂️🚇
+# Motu's Run: Subway & Temple Dash 🥟🏃‍♂️🚇
 
-> A high-octane 3D endless runner inspired by **Subway Surfers** and **Temple Run**, built with **Three.js**, **React 19**, and **Web Audio API**.
+> A high-speed, realistic 3D endless runner featuring **Motu** (from the famous *Motu Patlu* series), with **Easy**, **Medium**, and hardcore **Hard** difficulty modes! Built with **Three.js**, **React 19**, and procedural **Web Audio API**.
 
 ---
 
-## 🎮 Gameplay & Mechanics
+## 🌟 What's New in this Level
 
-- **3-Lane Track Navigation:** Seamlessly switch between Left, Center, and Right lanes with responsive exponential damping kinematics and banking tilt.
-- **Leap & Vault:** Jump over electric barricades and low obstacles with coyote time (120ms), jump buffering, and landing squash-and-stretch.
-- **Slide & Roll:** Slide under high-voltage laser barriers and heavy girders with halved hitbox height.
-- **MagLev Subway Train Surfing:** Moving and stationary MagLev trains barrel down the tracks. Switch lanes to evade them, or leap onto train roofs and surf along the elevated cars to grab exclusive coin lines!
-- **Chasing Security Drone ("The Enforcer"):** A quadcopter drone with forward searchlights and flashing emergency siren trails closely behind. If you clip an obstacle or stumble, the drone surges forward right on your heels!
-- **Collectibles & Power-Ups:**
-  - 🪙 **Cyber Coins:** Collect coins to multiply your final run score.
-  - 🧲 **Coin Magnet (10s):** Attracts all coins across all 3 lanes with a magnetic torus field.
-  - 🛡️ **Energy Shield (15s):** Absorbs 1 fatal obstacle crash, saving your run.
-  - 🚀 **Rocket Boost (6s):** Surges speed forward on an illuminated hoverboard, smashing effortlessly through any barrier in your path!
-  - ⭐ **2X Multiplier (12s):** Doubles all distance points and coin values.
+### 1. Realistic 3D Procedural Character: Motu (Motu Patlu)
+- **Signature Clothing:** Motu's iconic red sleeveless kurta/vest with gold buttons, bright yellow undershirt, and loose royal blue salwar pants.
+- **Classic Details:** Fleshy potbelly with bouncy jiggle physics while sprinting, curled handlebar moustache, round bulbous nose, bald scalp, and classic topknot hair tuft (*choti*).
+- **Traditional Footwear:** Curved Indian *mojari* shoes with upturned pointed toes.
+- **Motu's Hot Crispy Samosas:** Collect golden crispy samosas on the track for explosive Samosa Turbo Boosts with crunchy sound effects!
+- **Inspector Chingum's Pursuit:** Inspector Chingum's police quadcopter drone with flashing red and blue sirens trails closely behind Motu!
+
+---
+
+### 2. Difficulty Selection Modes
+
+Choose your level directly from the Title Screen:
+
+| Level | Name | Starting Speed | Max Speed | Obstacle Cadence | Moving Trains | Coyote Jump Buffer | Score Multiplier |
+|---|---|---|---|---|---|---|---|
+| 🟢 **EASY** | *Furfuri Walk* | **18 m/s** | 28 m/s | Relaxed (34–46m) | None (0%) | 180ms | **1.0x** |
+| 🟡 **MEDIUM** | *Market Dash* | **25 m/s** | 42 m/s | Balanced (22–32m) | 35% chance (8 m/s) | 120ms | **1.5x** |
+| 🔴 **HARD** | *Chingum Pursuit* | **34 m/s** | **56 m/s** | Rapid-fire (14–22m) | **65% chance (14 m/s!)** | 60ms | **3.0x REWARD** |
+
+#### Why Hard Mode is Intense & Realistic:
+- **Instant High Speed:** Starts at a blistering 34 m/s (122 km/h) and ramps up to 56 m/s (200+ km/h).
+- **Dynamic Speed Warp FOV:** The camera field-of-view expands dynamically from 62° to 76°, creating realistic optical speed distortion.
+- **Physical High-Speed Rumble:** Realistic micro-vibrations and camera shake simulate raw velocity.
+- **Aggressive Oncoming Trains:** 65% of MagLev trains barrel towards Motu at 14 m/s, requiring split-second reflex lane shifts or leaps onto train roofs!
+- **3.0X Score Multiplier:** Massive rewards for skilled players who survive the challenge.
 
 ---
 
@@ -27,36 +41,26 @@
 |---|---|
 | **Switch Lane Left** | `A` or `ArrowLeft` |
 | **Switch Lane Right** | `D` or `ArrowRight` |
-| **Jump / Vault** | `W`, `ArrowUp`, or `Space` |
-| **Slide / Roll** | `S` or `ArrowDown` |
+| **Jump / Leap** | `W`, `ArrowUp`, or `Space` |
+| **Slide / Roll Under Lasers** | `S` or `ArrowDown` |
 | **Pause / Resume** | `Esc` or `P` |
 | **Start / Restart** | `Space` or `Enter` |
 
-### Touch / Mobile
-- **Swipe Left / Right:** Switch lanes
+### Touch (Mobile & Tablet)
+- **Swipe Left / Right:** Change lanes
 - **Swipe Up:** Jump
 - **Swipe Down:** Slide / Roll
-- **On-Screen Arcade Buttons:** Discrete thumb buttons for mobile and tablet play
+- **On-Screen Arcade Buttons:** One-thumb mobile controls
 
 ---
 
-## 🏗️ Technical Architecture & Three.js Craft
+## ⚡ Power-Ups & Collectibles
 
-- **Three.js PBR Rendering:**
-  - `RoomEnvironment` with `PMREMGenerator` for realistic PBR environment reflections.
-  - Software WebGL detection (`isSoftwareGl`) optimizing pixel ratio, antialiasing, and shadows.
-  - Warm directional sun/moonlight paired with cool sky/ground `HemisphereLight` and matching `FogExp2` horizon fade-off.
-- **3–12 Part Procedural Composite Models:**
-  - **Cyber Runner:** Rigged 12-part hierarchy (torso armor, backpack jet nozzles, helmet with cyber visor, limbs with running stride animation, shoes with glowing cyan soles, toggleable shield dome and hoverboard).
-  - **MagLev Train:** Aerodynamic bullet nose, hazard bumper, rooftop running deck, passenger windows, and magnetic levitation ground glow.
-  - **Obstacles:** High laser gates, low roadblocks with warning lights, and signal columns.
-- **Procedural Web Audio System:**
-  - Zero external `.mp3` dependencies.
-  - Synthesized in real time via Web Audio API: jump whooshes, slide rumble sweeps, pentatonic coin chimes, major triad power-up chords, and explosive crash impacts.
-- **Zero-Occlusion Game Shell UI:**
-  - Full-viewport shell (`Title Screen` ➔ `Playing` ➔ `Pause / Game Over`).
-  - Perimeter HUD keeping >85% of the 3D playfield completely unobstructed.
-  - No `backdrop-filter` over the active WebGL canvas to preserve 60 FPS performance.
+- 🥟 **Crispy Samosa:** Motu's favorite food! Gives instant Samosa Turbo Boost and 200 points.
+- 🪙 **Gold Coins:** Pick up coins along tracks and train roofs to rack up high scores.
+- 🧲 **Coin Magnet (10s):** Attracts all coins across all 3 lanes.
+- 🛡️ **Energy Shield (15s):** Absorbs 1 crash impact.
+- ⭐ **2X Multiplier (12s):** Doubles all points and coin values.
 
 ---
 

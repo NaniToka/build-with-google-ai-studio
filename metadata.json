@@ -1,6 +1,6 @@
 {
-  "name": "CyberSurge: Neon Endless Runner",
-  "description": "High-octane 3D endless runner inspired by Subway Surfers and Temple Run. Dash across 3 lanes, leap over barriers, slide under lasers, surf on trains, and collect coins in a vibrant cyberpunk world.",
+  "name": "Motu's Run: Subway & Temple Dash",
+  "description": "Control Motu from Motu Patlu in this 3D endless runner! Choose Easy, Medium, or realistic Hard mode. Dash across 3 lanes, leap over roadblocks, roll under lasers, collect golden samosas, and escape Inspector Chingum.",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

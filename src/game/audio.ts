@@ -260,6 +260,52 @@ class SoundSystem {
     osc.start(t);
     osc.stop(t + 0.25);
   }
+
+  // Motu's Crispy Samosa Bite & Power Surge
+  public playSamosa() {
+    if (this.isMuted) return;
+    this.initCtx();
+    if (!this.ctx) return;
+
+    const t = this.ctx.currentTime;
+
+    // 1. Crunchy bite sound
+    const crunchSize = this.ctx.sampleRate * 0.08;
+    const crunchBuffer = this.ctx.createBuffer(1, crunchSize, this.ctx.sampleRate);
+    const data = crunchBuffer.getChannelData(0);
+    for (let i = 0; i < crunchSize; i++) {
+      data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (crunchSize * 0.2));
+    }
+    const crunch = this.ctx.createBufferSource();
+    crunch.buffer = crunchBuffer;
+    const crunchFilter = this.ctx.createBiquadFilter();
+    crunchFilter.type = 'bandpass';
+    crunchFilter.frequency.setValueAtTime(2400, t);
+    const crunchGain = this.ctx.createGain();
+    crunchGain.gain.setValueAtTime(0.35, t);
+    crunch.connect(crunchFilter);
+    crunchFilter.connect(crunchGain);
+    crunchGain.connect(this.ctx.destination);
+    crunch.start(t);
+
+    // 2. Energetic triumph rising arpeggio (C5 -> E5 -> G5 -> C6)
+    const notes = [523.25, 659.25, 783.99, 1046.5];
+    notes.forEach((freq, idx) => {
+      const osc = this.ctx!.createOscillator();
+      const gain = this.ctx!.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(freq, t + 0.06 + idx * 0.05);
+
+      gain.gain.setValueAtTime(0.2, t + 0.06 + idx * 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.28 + idx * 0.05);
+
+      osc.connect(gain);
+      gain.connect(this.ctx!.destination);
+
+      osc.start(t + 0.06 + idx * 0.05);
+      osc.stop(t + 0.3 + idx * 0.05);
+    });
+  }
 }
 
 export const sound = new SoundSystem();

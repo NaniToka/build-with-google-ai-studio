@@ -10,9 +10,11 @@ export default function App() {
   const [stats, setStats] = useState<GameStats>({
     score: 0,
     coins: 0,
+    samosas: 0,
     distance: 0,
-    multiplier: 1,
+    multiplier: 1.5,
     speed: 0,
+    difficulty: 'MEDIUM',
     activePowerup: {
       type: null,
       remaining: 0,
@@ -69,6 +71,10 @@ export default function App() {
     engineRef.current?.slide();
   };
 
+  const handleSelectDifficulty = (diff: import('./game/engine').GameDifficulty) => {
+    engineRef.current?.setDifficulty(diff);
+  };
+
   return (
     <div className="relative w-screen h-screen overflow-hidden bg-black select-none touch-none">
       {/* Isolated Three.js WebGL Mount Container */}
@@ -85,6 +91,7 @@ export default function App() {
         onMoveRight={handleMoveRight}
         onJump={handleJump}
         onSlide={handleSlide}
+        onSelectDifficulty={handleSelectDifficulty}
       />
     </div>
   );

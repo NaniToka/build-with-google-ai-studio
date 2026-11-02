@@ -3,14 +3,18 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { ModelFactory } from './models';
 import { sound } from './audio';
 
+export type GameDifficulty = 'EASY' | 'MEDIUM' | 'HARD';
+
 export interface GameStats {
   score: number;
   coins: number;
+  samosas: number;
   distance: number;
   multiplier: number;
   speed: number;
+  difficulty: GameDifficulty;
   activePowerup: {
-    type: 'magnet' | 'shield' | 'boost' | 'multiplier' | null;
+    type: 'magnet' | 'shield' | 'boost' | 'multiplier' | 'samosa' | null;
     remaining: number;
   };
   highScore: number;
@@ -35,11 +39,12 @@ interface CoinEntity {
   z: number;
   y: number;
   collected: boolean;
+  isSamosa?: boolean;
 }
 
 interface PowerupEntity {
   group: THREE.Group;
-  type: 'magnet' | 'shield' | 'boost' | 'multiplier';
+  type: 'magnet' | 'shield' | 'boost' | 'multiplier' | 'samosa';
   lane: number;
   z: number;
   y: number;
@@ -68,19 +73,25 @@ export class RunnerEngine {
   public onStatsUpdate?: (stats: GameStats) => void;
   public onStateChange?: (state: GameState) => void;
 
-  // Game Lifecycle State
+  // Game Lifecycle State & Difficulty
   private state: GameState = 'TITLE';
+  private difficulty: GameDifficulty = 'MEDIUM';
   private highScore: number = 0;
   private score: number = 0;
   private coins: number = 0;
+  private samosas: number = 0;
   private distance: number = 0;
-  private multiplier: number = 1;
-  private baseSpeed: number = 24; // m/s
-  private currentSpeed: number = 24;
+  private baseMultiplier: number = 1.5;
+  private activeMultiplier: number = 1;
+  private baseSpeed: number = 25;
+  private maxSpeedRamp: number = 42;
+  private currentSpeed: number = 25;
+
   private boostTimer: number = 0;
   private magnetTimer: number = 0;
   private shieldTimer: number = 0;
   private multiplierTimer: number = 0;
+  private samosaBoostTimer: number = 0;
 
   // Lane Configuration (-3.2m, 0m, +3.2m)
   private readonly LANE_WIDTH = 3.2;
@@ -95,11 +106,10 @@ export class RunnerEngine {
   private slideTimer: number = 0;
   private coyoteTimer: number = 0;
   private jumpBufferTimer: number = 0;
-  private groundHeight: number = 0; // 0 on track, or 2.8 on top of train
-  private currentStandingTrain: ObstacleEntity | null = null;
+  private groundHeight: number = 0;
 
-  // Visuals & Rig
-  private runnerRig!: ReturnType<typeof ModelFactory.createRunner>;
+  // Motu Rig & Inspector Chingum Police Drone
+  private motuRig!: ReturnType<typeof ModelFactory.createRunner>;
   private droneRig!: ReturnType<typeof ModelFactory.createChasingDrone>;
   private droneDistance: number = 6.0;
   private droneTargetDistance: number = 6.0;
@@ -108,7 +118,6 @@ export class RunnerEngine {
   private trackChunks: THREE.Group[] = [];
   private readonly CHUNK_LENGTH = 50;
   private readonly NUM_CHUNKS = 8;
-  private nextSpawnZ: number = -40;
 
   // Entities
   private obstacles: ObstacleEntity[] = [];
@@ -120,18 +129,14 @@ export class RunnerEngine {
   private hitstopTimer: number = 0;
   private cameraShakeIntensity: number = 0;
   private runCycle: number = 0;
+  private baseFov: number = 62;
 
   // Reusable math objects
   private _camTarget = new THREE.Vector3();
 
   constructor(container: HTMLElement) {
     this.container = container;
-    try {
-      this.highScore = parseInt(localStorage.getItem('cybersurge_highscore') || '0', 10);
-    } catch {
-      this.highScore = 0;
-    }
-
+    this.loadSavedSettings();
     this.initWebGL();
     this.initLightingAndEnv();
     this.initPlayer();
@@ -139,6 +144,51 @@ export class RunnerEngine {
     this.initTrackPool();
     this.initInput();
     this.startLoop();
+  }
+
+  private loadSavedSettings() {
+    try {
+      this.highScore = parseInt(localStorage.getItem('cybersurge_highscore') || '0', 10);
+      const savedDiff = localStorage.getItem('cybersurge_diff') as GameDifficulty;
+      if (savedDiff && (savedDiff === 'EASY' || savedDiff === 'MEDIUM' || savedDiff === 'HARD')) {
+        this.difficulty = savedDiff;
+      }
+    } catch {
+      this.highScore = 0;
+      this.difficulty = 'MEDIUM';
+    }
+    this.applyDifficultyParameters();
+  }
+
+  public setDifficulty(diff: GameDifficulty) {
+    this.difficulty = diff;
+    try {
+      localStorage.setItem('cybersurge_diff', diff);
+    } catch {}
+    this.applyDifficultyParameters();
+    this.emitStats();
+  }
+
+  public getDifficulty(): GameDifficulty {
+    return this.difficulty;
+  }
+
+  private applyDifficultyParameters() {
+    if (this.difficulty === 'EASY') {
+      this.baseSpeed = 18;
+      this.maxSpeedRamp = 28;
+      this.baseMultiplier = 1.0;
+    } else if (this.difficulty === 'MEDIUM') {
+      this.baseSpeed = 25;
+      this.maxSpeedRamp = 42;
+      this.baseMultiplier = 1.5;
+    } else {
+      // HARD (Realistic High-Octane Rush)
+      this.baseSpeed = 34; // Starts very fast!
+      this.maxSpeedRamp = 56; // Extreme hyper-speed!
+      this.baseMultiplier = 3.0; // High reward for hard difficulty
+    }
+    this.currentSpeed = this.baseSpeed;
   }
 
   private initWebGL() {
@@ -157,13 +207,13 @@ export class RunnerEngine {
     })();
 
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x060913); // Deep night cyber sky
+    this.scene.background = new THREE.Color(0x060913);
     this.scene.fog = new THREE.FogExp2(0x060913, 0.012);
 
     const width = this.container.clientWidth || window.innerWidth;
     const height = this.container.clientHeight || window.innerHeight;
 
-    this.camera = new THREE.PerspectiveCamera(62, width / height, 0.1, 400);
+    this.camera = new THREE.PerspectiveCamera(this.baseFov, width / height, 0.1, 400);
     this.camera.position.set(0, 4.5, 7.5);
 
     this.renderer = new THREE.WebGLRenderer({
@@ -180,7 +230,6 @@ export class RunnerEngine {
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     this.container.appendChild(this.renderer.domElement);
-
     window.addEventListener('resize', this.onResize);
   }
 
@@ -194,12 +243,10 @@ export class RunnerEngine {
   };
 
   private initLightingAndEnv() {
-    // Studio Environment map via PMREMGenerator
     const pmrem = new THREE.PMREMGenerator(this.renderer);
     this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
     pmrem.dispose();
 
-    // Directional Key Light (Sun/Moonlight casting crisp shadows)
     const keyLight = new THREE.DirectionalLight(0xfff1e6, 1.4);
     keyLight.position.set(15, 30, 20);
     keyLight.castShadow = !this.isSoftwareGl;
@@ -218,19 +265,17 @@ export class RunnerEngine {
     }
     this.scene.add(keyLight);
 
-    // Cool Cyber Sky & Ground Hemisphere Light
     const hemiLight = new THREE.HemisphereLight(0x00f5ff, 0x1e1b4b, 0.7);
     hemiLight.position.set(0, 40, 0);
     this.scene.add(hemiLight);
 
-    // Warm Ambient Light
     const amb = new THREE.AmbientLight(0xffffff, 0.35);
     this.scene.add(amb);
   }
 
   private initPlayer() {
-    this.runnerRig = ModelFactory.createRunner();
-    this.scene.add(this.runnerRig.root);
+    this.motuRig = ModelFactory.createRunner();
+    this.scene.add(this.motuRig.root);
     this.resetPlayerPosition();
   }
 
@@ -247,15 +292,15 @@ export class RunnerEngine {
     this.coyoteTimer = 0;
     this.jumpBufferTimer = 0;
     this.groundHeight = 0;
-    this.currentStandingTrain = null;
 
-    if (this.runnerRig) {
-      this.runnerRig.root.position.set(0, 0, 0);
-      this.runnerRig.root.rotation.set(0, 0, 0);
-      this.runnerRig.root.scale.set(1, 1, 1);
-      this.runnerRig.shieldMesh.visible = false;
-      this.runnerRig.magnetRing.visible = false;
-      this.runnerRig.hoverboard.visible = false;
+    if (this.motuRig) {
+      this.motuRig.root.position.set(0, 0, 0);
+      this.motuRig.root.rotation.set(0, 0, 0);
+      this.motuRig.root.scale.set(1, 1, 1);
+      this.motuRig.shieldMesh.visible = false;
+      this.motuRig.magnetRing.visible = false;
+      this.motuRig.hoverboard.visible = false;
+      this.motuRig.samosaAura.visible = false;
     }
   }
 
@@ -265,13 +310,12 @@ export class RunnerEngine {
     this.droneRig.root.position.set(0, 2.2, 6.0);
   }
 
-  // Procedural Track Builder
   private createTrackChunk(zPos: number): THREE.Group {
     const chunk = new THREE.Group();
     chunk.position.z = zPos;
 
     const roadMat = new THREE.MeshStandardMaterial({
-      color: 0x0a0f1d, // Dark metallic subway bed
+      color: 0x0a0f1d,
       roughness: 0.8,
       metalness: 0.3,
     });
@@ -298,8 +342,7 @@ export class RunnerEngine {
 
     const windowMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
 
-    // Main 3-Lane Road Surface
-    const roadWidth = this.LANE_WIDTH * 3 + 2.5; // ~12m wide
+    const roadWidth = this.LANE_WIDTH * 3 + 2.5;
     const road = new THREE.Mesh(
       new THREE.BoxGeometry(roadWidth, 0.4, this.CHUNK_LENGTH),
       roadMat
@@ -308,7 +351,6 @@ export class RunnerEngine {
     road.receiveShadow = true;
     chunk.add(road);
 
-    // Neon Track Divider Lines
     [-this.LANE_WIDTH / 2, this.LANE_WIDTH / 2].forEach((x) => {
       const line = new THREE.Mesh(
         new THREE.PlaneGeometry(0.12, this.CHUNK_LENGTH),
@@ -319,7 +361,6 @@ export class RunnerEngine {
       chunk.add(line);
     });
 
-    // Outer Neon Power Rails
     [-this.LANE_WIDTH * 1.5 - 0.2, this.LANE_WIDTH * 1.5 + 0.2].forEach((x) => {
       const rail = new THREE.Mesh(
         new THREE.BoxGeometry(0.2, 0.25, this.CHUNK_LENGTH),
@@ -328,7 +369,6 @@ export class RunnerEngine {
       rail.position.set(x, 0.12, -this.CHUNK_LENGTH / 2);
       chunk.add(rail);
 
-      // Guardrail barrier
       const barrier = new THREE.Mesh(
         new THREE.BoxGeometry(0.35, 1.2, this.CHUNK_LENGTH),
         sideMat
@@ -339,7 +379,6 @@ export class RunnerEngine {
       chunk.add(barrier);
     });
 
-    // Cyberpunk Skyline Buildings along the flanks
     [-14, 14].forEach((bldgX) => {
       const bldgH = 25 + Math.random() * 35;
       const bldgW = 10 + Math.random() * 8;
@@ -351,7 +390,6 @@ export class RunnerEngine {
       building.position.set(bldgX + (bldgX > 0 ? 5 : -5), bldgH / 2 - 2, -this.CHUNK_LENGTH / 2);
       chunk.add(building);
 
-      // Random glowing holographic window bands
       const band = new THREE.Mesh(
         new THREE.BoxGeometry(bldgW + 0.1, 0.4, bldgD * 0.7),
         windowMat
@@ -360,7 +398,6 @@ export class RunnerEngine {
       chunk.add(band);
     });
 
-    // Overhead Neon Cyber Arch spanning the road
     const archMat = new THREE.MeshStandardMaterial({
       color: 0xf43f5e,
       emissive: 0xe11d48,
@@ -384,27 +421,42 @@ export class RunnerEngine {
       const chunk = this.createTrackChunk(zPos);
       this.trackChunks.push(chunk);
     }
-    this.nextSpawnZ = -30;
   }
 
-  // Obstacle & Coin Spawning Logic
   private spawnTrackSectionEntities(startZ: number, endZ: number) {
     if (this.state !== 'PLAYING') return;
 
     let currentZ = startZ;
+    // Spacing depends on difficulty:
+    // Easy: 34-46m spacing
+    // Medium: 22-32m spacing
+    // Hard: 14-22m spacing (Tight, high reaction required!)
+    const minSpacing = this.difficulty === 'EASY' ? 34 : this.difficulty === 'MEDIUM' ? 22 : 14;
+    const varSpacing = this.difficulty === 'EASY' ? 12 : this.difficulty === 'MEDIUM' ? 10 : 8;
+
     while (currentZ > endZ) {
-      currentZ -= 22 + Math.random() * 12; // Spacing between obstacle gates
+      currentZ -= minSpacing + Math.random() * varSpacing;
 
       const rand = Math.random();
-      const lane = Math.floor(Math.random() * 3) - 1; // -1, 0, 1
+      const lane = Math.floor(Math.random() * 3) - 1;
 
-      // 1. MagLev Train (Barrels towards player or provides roof platform)
-      if (rand < 0.28) {
+      // 1. MagLev Subway Train
+      if (rand < 0.32) {
         const trainGroup = ModelFactory.createTrain(26);
         trainGroup.position.set(lane * this.LANE_WIDTH, 0, currentZ);
         this.scene.add(trainGroup);
 
-        const trainSpeed = Math.random() < 0.4 ? 8.0 : 0; // 40% chance of moving train!
+        // Moving train probability:
+        // Easy: 0%
+        // Medium: 35% (8 m/s)
+        // Hard: 65% (14 m/s oncoming speed!)
+        let trainSpeed = 0;
+        if (this.difficulty === 'HARD') {
+          trainSpeed = Math.random() < 0.65 ? 14.0 : 0;
+        } else if (this.difficulty === 'MEDIUM') {
+          trainSpeed = Math.random() < 0.35 ? 8.0 : 0;
+        }
+
         this.obstacles.push({
           group: trainGroup,
           type: 'TRAIN',
@@ -416,8 +468,22 @@ export class RunnerEngine {
           hit: false,
         });
 
-        // Spawn a string of coins on top of the train roof!
-        for (let cz = -10; cz <= 10; cz += 3) {
+        // Samosa on train roof!
+        const samosaPickup = ModelFactory.createSamosa();
+        samosaPickup.position.set(lane * this.LANE_WIDTH, 3.4, currentZ);
+        this.scene.add(samosaPickup);
+        this.coinEntities.push({
+          group: samosaPickup,
+          lane,
+          z: currentZ,
+          y: 3.4,
+          collected: false,
+          isSamosa: true,
+        });
+
+        // Coin row along roof
+        for (let cz = -8; cz <= 8; cz += 4) {
+          if (cz === 0) continue;
           const coinGroup = ModelFactory.createCoin();
           coinGroup.position.set(lane * this.LANE_WIDTH, 3.2, currentZ + cz);
           this.scene.add(coinGroup);
@@ -430,8 +496,8 @@ export class RunnerEngine {
           });
         }
       }
-      // 2. High Laser Barricade (Slide Under)
-      else if (rand < 0.54) {
+      // 2. High Laser Barricade (Motu slides under)
+      else if (rand < 0.58) {
         const laserGroup = ModelFactory.createHighLaserBarricade();
         laserGroup.position.set(lane * this.LANE_WIDTH, 0, currentZ);
         this.scene.add(laserGroup);
@@ -446,7 +512,7 @@ export class RunnerEngine {
           hit: false,
         });
 
-        // Spawn low sliding coins underneath
+        // Low sliding coins
         for (let cz = -2; cz <= 2; cz += 2) {
           const coinGroup = ModelFactory.createCoin();
           coinGroup.position.set(lane * this.LANE_WIDTH, 0.4, currentZ + cz);
@@ -460,8 +526,8 @@ export class RunnerEngine {
           });
         }
       }
-      // 3. Low Roadblock Barricade (Jump Over)
-      else if (rand < 0.82) {
+      // 3. Low Barricade (Motu jumps over)
+      else if (rand < 0.84) {
         const barrierGroup = ModelFactory.createLowBarricade();
         barrierGroup.position.set(lane * this.LANE_WIDTH, 0, currentZ);
         this.scene.add(barrierGroup);
@@ -476,7 +542,7 @@ export class RunnerEngine {
           hit: false,
         });
 
-        // Spawn high coin arc over the jump hurdle!
+        // Jump arc coins
         [-2.5, 0, 2.5].forEach((cz, i) => {
           const y = i === 1 ? 2.4 : 1.6;
           const coinGroup = ModelFactory.createCoin();
@@ -508,13 +574,14 @@ export class RunnerEngine {
         });
       }
 
-      // 12% chance to spawn a Power-up in an open adjacent lane
-      if (Math.random() < 0.14) {
+      // 16% chance to spawn Powerup / Samosa in adjacent lane
+      if (Math.random() < 0.16) {
         const pLane = (lane + 1 > 1 ? -1 : lane + 1);
-        const types: ('magnet' | 'shield' | 'boost' | 'multiplier')[] = [
+        const types: ('magnet' | 'shield' | 'boost' | 'multiplier' | 'samosa')[] = [
+          'samosa',
+          'samosa',
           'magnet',
           'shield',
-          'boost',
           'multiplier',
         ];
         const pType = types[Math.floor(Math.random() * types.length)];
@@ -534,12 +601,10 @@ export class RunnerEngine {
     }
   }
 
-  // Input Handlers
   private initInput() {
     window.addEventListener('keydown', this.handleKeyDown);
     window.addEventListener('blur', this.handleBlur);
 
-    // Touch swipe handling for mobile
     let touchStartX = 0;
     let touchStartY = 0;
     let touchStartTime = 0;
@@ -566,9 +631,7 @@ export class RunnerEngine {
             if (dy < 0) this.jump();
             else this.slide();
           } else {
-            // Tap to start if on title
-            if (this.state === 'TITLE') this.startRun();
-            else if (this.state === 'GAMEOVER') this.startRun();
+            if (this.state === 'TITLE' || this.state === 'GAMEOVER') this.startRun();
           }
         }
       }
@@ -579,15 +642,7 @@ export class RunnerEngine {
   }
 
   private handleKeyDown = (e: KeyboardEvent) => {
-    if (this.state === 'TITLE') {
-      if (e.code === 'Space' || e.code === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        this.startRun();
-      }
-      return;
-    }
-
-    if (this.state === 'GAMEOVER') {
+    if (this.state === 'TITLE' || this.state === 'GAMEOVER') {
       if (e.code === 'Space' || e.code === 'Enter' || e.key === ' ') {
         e.preventDefault();
         this.startRun();
@@ -624,7 +679,6 @@ export class RunnerEngine {
     }
   };
 
-  // Player Actions
   public moveLeft() {
     if (this.currentLane > -1) {
       this.currentLane--;
@@ -652,19 +706,16 @@ export class RunnerEngine {
       this.isSliding = false;
       this.slideTimer = 0;
 
-      // Squash and stretch
-      this.runnerRig.root.scale.set(0.85, 1.25, 0.85);
+      this.motuRig.root.scale.set(0.88, 1.22, 0.88);
       sound.playJump();
       this.spawnFootstepSparks(0);
     } else {
-      // Buffer jump for responsive landing input
       this.jumpBufferTimer = 0.16;
     }
   }
 
   public slide() {
     if (!this.isGrounded) {
-      // Fast fall down slam
       this.verticalVelocity = -22;
     }
     this.isSliding = true;
@@ -673,10 +724,9 @@ export class RunnerEngine {
     this.spawnSlideDust();
   }
 
-  // Particle Effects
   private spawnFootstepSparks(xOffset: number) {
     const geo = new THREE.BoxGeometry(0.08, 0.08, 0.08);
-    const mat = new THREE.MeshBasicMaterial({ color: 0x00f5ff });
+    const mat = new THREE.MeshBasicMaterial({ color: 0xf59e0b });
     for (let i = 0; i < 4; i++) {
       const mesh = new THREE.Mesh(geo, mat);
       mesh.position.set(
@@ -698,7 +748,7 @@ export class RunnerEngine {
 
   private spawnSlideDust() {
     const geo = new THREE.BoxGeometry(0.12, 0.12, 0.12);
-    const mat = new THREE.MeshBasicMaterial({ color: 0xf59e0b });
+    const mat = new THREE.MeshBasicMaterial({ color: 0xfbbf24 });
     for (let i = 0; i < 6; i++) {
       const mesh = new THREE.Mesh(geo, mat);
       mesh.position.set(
@@ -718,9 +768,9 @@ export class RunnerEngine {
     }
   }
 
-  private spawnCoinSparks(x: number, y: number, z: number) {
+  private spawnCoinSparks(x: number, y: number, z: number, color = 0xffd700) {
     const geo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
-    const mat = new THREE.MeshBasicMaterial({ color: 0xffd700 });
+    const mat = new THREE.MeshBasicMaterial({ color });
     for (let i = 0; i < 8; i++) {
       const mesh = new THREE.Mesh(geo, mat);
       mesh.position.set(x, y, z);
@@ -736,13 +786,12 @@ export class RunnerEngine {
     }
   }
 
-  // Game Loop
   private startLoop() {
     this.clock.start();
     const tick = () => {
       this.animFrameId = requestAnimationFrame(tick);
       const rawDt = this.clock.getDelta();
-      const dt = Math.min(rawDt, 0.05); // Clamp dt to prevent tunneling
+      const dt = Math.min(rawDt, 0.05);
 
       this.update(dt);
       this.render();
@@ -751,13 +800,11 @@ export class RunnerEngine {
   }
 
   private update(dt: number) {
-    // Hitstop handling
     if (this.hitstopTimer > 0) {
       this.hitstopTimer -= dt;
       return;
     }
 
-    // Title Screen Idle Pan
     if (this.state === 'TITLE') {
       const time = this.clock.getElapsedTime();
       this.camera.position.x = Math.sin(time * 0.5) * 2.5;
@@ -765,59 +812,78 @@ export class RunnerEngine {
       this.camera.position.z = 6.0;
       this.camera.lookAt(0, 1.4, -2.5);
 
-      // Gentle breathing idle
-      this.runnerRig.root.position.y = Math.sin(time * 2.5) * 0.04;
-      this.runnerRig.spine.rotation.x = Math.sin(time * 2.5) * 0.03;
+      this.motuRig.root.position.y = Math.sin(time * 2.5) * 0.04;
+      this.motuRig.spine.rotation.x = Math.sin(time * 2.5) * 0.03;
+      // Gentle belly breathing
+      this.motuRig.belly.scale.set(
+        1.15 + Math.sin(time * 2.5) * 0.03,
+        1.05 + Math.sin(time * 2.5) * 0.03,
+        1.25
+      );
       return;
     }
 
     if (this.state === 'PAUSED') return;
 
     if (this.state === 'PLAYING') {
-      // Speed Ramp over distance (starts at 24 m/s, gradually scales to 42 m/s)
-      const targetSpeed = Math.min(24 + (this.distance / 180), 44);
-      this.currentSpeed = this.boostTimer > 0 ? targetSpeed * 1.5 : targetSpeed;
+      // Speed ramp based on difficulty and distance
+      const rampScale = this.difficulty === 'HARD' ? 100 : this.difficulty === 'MEDIUM' ? 180 : 250;
+      const targetSpeed = Math.min(this.baseSpeed + (this.distance / rampScale), this.maxSpeedRamp);
 
-      // Update distance and score
+      const isTurbo = this.boostTimer > 0 || this.samosaBoostTimer > 0;
+      this.currentSpeed = isTurbo ? targetSpeed * 1.5 : targetSpeed;
+
+      // Distance and score
       this.distance += this.currentSpeed * dt;
-      this.score += Math.floor(this.currentSpeed * dt * this.multiplier * 2);
+      const effectiveMultiplier = this.baseMultiplier * this.activeMultiplier;
+      this.score += Math.floor(this.currentSpeed * dt * effectiveMultiplier * 2);
 
       // Power-up Timers
+      if (this.samosaBoostTimer > 0) {
+        this.samosaBoostTimer -= dt;
+        this.motuRig.samosaAura.visible = true;
+        this.motuRig.samosaAura.rotation.y += dt * 4;
+        if (this.samosaBoostTimer <= 0) this.motuRig.samosaAura.visible = false;
+      }
+
       if (this.boostTimer > 0) {
         this.boostTimer -= dt;
-        this.runnerRig.hoverboard.visible = true;
-        if (this.boostTimer <= 0) this.runnerRig.hoverboard.visible = false;
+        this.motuRig.hoverboard.visible = true;
+        if (this.boostTimer <= 0) this.motuRig.hoverboard.visible = false;
       }
+
       if (this.magnetTimer > 0) {
         this.magnetTimer -= dt;
-        this.runnerRig.magnetRing.visible = true;
-        this.runnerRig.magnetRing.rotation.z += dt * 6;
-        if (this.magnetTimer <= 0) this.runnerRig.magnetRing.visible = false;
+        this.motuRig.magnetRing.visible = true;
+        this.motuRig.magnetRing.rotation.z += dt * 6;
+        if (this.magnetTimer <= 0) this.motuRig.magnetRing.visible = false;
       }
+
       if (this.shieldTimer > 0) {
         this.shieldTimer -= dt;
-        this.runnerRig.shieldMesh.visible = true;
-        this.runnerRig.shieldMesh.rotation.y += dt * 2;
-        if (this.shieldTimer <= 0) this.runnerRig.shieldMesh.visible = false;
+        this.motuRig.shieldMesh.visible = true;
+        this.motuRig.shieldMesh.rotation.y += dt * 2;
+        if (this.shieldTimer <= 0) this.motuRig.shieldMesh.visible = false;
       }
+
       if (this.multiplierTimer > 0) {
         this.multiplierTimer -= dt;
-        this.multiplier = 2;
-        if (this.multiplierTimer <= 0) this.multiplier = 1;
+        this.activeMultiplier = 2;
+        if (this.multiplierTimer <= 0) this.activeMultiplier = 1;
       }
 
-      // Move player forward in world space
+      // Move player forward
       this.playerZ -= this.currentSpeed * dt;
 
-      // Smooth Lane Switching with Exponential Damping
-      this.playerX = THREE.MathUtils.damp(this.playerX, this.targetX, 22, dt);
+      // Smooth Lane Switching
+      const laneLerpSpeed = this.difficulty === 'HARD' ? 26 : 22;
+      this.playerX = THREE.MathUtils.damp(this.playerX, this.targetX, laneLerpSpeed, dt);
       const laneDelta = this.targetX - this.playerX;
-      this.runnerRig.root.rotation.z = -laneDelta * 0.15; // Realistic banking tilt
+      this.motuRig.root.rotation.z = -laneDelta * 0.15;
 
-      // Jump & Gravity Simulation
+      // Physics
       this.updateVerticalPhysics(dt);
 
-      // Slide Timer
       if (this.isSliding) {
         this.slideTimer -= dt;
         if (this.slideTimer <= 0) {
@@ -825,78 +891,55 @@ export class RunnerEngine {
         }
       }
 
-      // Check standing on top of trains
       this.updateTrainSurfing();
-
-      // Running Animation Cycles
-      this.updateRunnerBones(dt);
-
-      // Update Chasing Security Drone
+      this.updateMotuAnimation(dt);
       this.updateDrone(dt);
-
-      // Recycle and spawn track chunks ahead
       this.updateTrackChunks();
-
-      // Update obstacles (moving trains) and collisions
       this.updateObstacles(dt);
-
-      // Magnet Coin Attraction & Collection
       this.updateCoins(dt);
-
-      // Powerup Collection
       this.updatePowerups(dt);
-
-      // Particles
       this.updateParticles(dt);
-
-      // Camera Tracking with dynamic lean and shake
       this.updateCamera(dt);
-
-      // Send HUD stats to React
       this.emitStats();
     }
   }
 
   private updateVerticalPhysics(dt: number) {
-    const gravity = -42; // m/s²
+    const gravity = -42;
 
     if (!this.isGrounded) {
       this.verticalVelocity += gravity * dt;
       this.playerY += this.verticalVelocity * dt;
 
-      // Check landing on ground or train roof
       if (this.playerY <= this.groundHeight) {
         this.playerY = this.groundHeight;
         this.verticalVelocity = 0;
         this.isGrounded = true;
 
-        // Landing squash
-        this.runnerRig.root.scale.set(1.2, 0.78, 1.2);
+        this.motuRig.root.scale.set(1.22, 0.76, 1.22);
         this.spawnFootstepSparks(0);
 
-        // Execute buffered jump if pressed just before landing
         if (this.jumpBufferTimer > 0) {
           this.jump();
         }
       }
     } else {
       this.playerY = this.groundHeight;
-      this.coyoteTimer = 0.12; // Allow jump for 120ms after running off edge
+      const baseCoyote = this.difficulty === 'EASY' ? 0.18 : this.difficulty === 'MEDIUM' ? 0.12 : 0.06;
+      this.coyoteTimer = baseCoyote;
     }
 
     if (this.jumpBufferTimer > 0) this.jumpBufferTimer -= dt;
     if (this.coyoteTimer > 0 && !this.isGrounded) this.coyoteTimer -= dt;
 
-    // Smoothly restore mesh scale from squash/stretch
-    this.runnerRig.root.scale.x = THREE.MathUtils.damp(this.runnerRig.root.scale.x, 1, 14, dt);
-    this.runnerRig.root.scale.y = THREE.MathUtils.damp(this.runnerRig.root.scale.y, 1, 14, dt);
-    this.runnerRig.root.scale.z = THREE.MathUtils.damp(this.runnerRig.root.scale.z, 1, 14, dt);
+    this.motuRig.root.scale.x = THREE.MathUtils.damp(this.motuRig.root.scale.x, 1, 14, dt);
+    this.motuRig.root.scale.y = THREE.MathUtils.damp(this.motuRig.root.scale.y, 1, 14, dt);
+    this.motuRig.root.scale.z = THREE.MathUtils.damp(this.motuRig.root.scale.z, 1, 14, dt);
 
-    this.runnerRig.root.position.set(this.playerX, this.playerY, this.playerZ);
+    this.motuRig.root.position.set(this.playerX, this.playerY, this.playerZ);
   }
 
   private updateTrainSurfing() {
-    // Check if player is positioned directly over a train in the same lane
     let onTrain: ObstacleEntity | null = null;
 
     for (const obs of this.obstacles) {
@@ -907,7 +950,6 @@ export class RunnerEngine {
         const sameLane = Math.abs(this.playerX - obs.group.position.x) < 1.4;
 
         if (sameLane && dz < trainHalfLength + 0.5) {
-          // If player was jumping above train roof (height = 2.8m)
           if (this.playerY >= 2.5) {
             onTrain = obs;
             break;
@@ -918,57 +960,59 @@ export class RunnerEngine {
 
     if (onTrain) {
       this.groundHeight = 2.8;
-      this.currentStandingTrain = onTrain;
     } else {
       this.groundHeight = 0;
-      this.currentStandingTrain = null;
       if (this.playerY > 0 && this.isGrounded) {
-        // Player ran off the edge of train roof!
         this.isGrounded = false;
         this.verticalVelocity = 0;
       }
     }
   }
 
-  private updateRunnerBones(dt: number) {
+  // Realistic Motu Running Animation with Chubby Belly Jiggle & Moustache Bob!
+  private updateMotuAnimation(dt: number) {
     this.runCycle += dt * this.currentSpeed * 0.45;
     const sin = Math.sin(this.runCycle);
     const cos = Math.cos(this.runCycle);
 
+    // Iconic Potbelly Jiggle
+    const bellyJiggle = Math.sin(this.runCycle * 2) * 0.06;
+    this.motuRig.belly.scale.set(1.15 + bellyJiggle, 1.05 - bellyJiggle * 0.5, 1.25 + bellyJiggle);
+
     if (this.isSliding) {
-      // Low Slide Posture
-      this.runnerRig.spine.position.y = 0.45;
-      this.runnerRig.spine.rotation.x = 0.95; // Lean chest far forward
-      this.runnerRig.head.rotation.x = -0.7; // Look up while sliding
-      this.runnerRig.leftLeg.rotation.x = -1.2;
-      this.runnerRig.rightLeg.rotation.x = 1.1;
-      this.runnerRig.leftArm.rotation.x = 0.8;
-      this.runnerRig.rightArm.rotation.x = 0.8;
+      // Motu Rolls forward into a round ball
+      this.motuRig.spine.position.y = 0.45;
+      this.motuRig.spine.rotation.x = 1.0;
+      this.motuRig.head.rotation.x = -0.7;
+      this.motuRig.leftLeg.rotation.x = -1.2;
+      this.motuRig.rightLeg.rotation.x = 1.1;
+      this.motuRig.leftArm.rotation.x = 0.8;
+      this.motuRig.rightArm.rotation.x = 0.8;
     } else if (!this.isGrounded) {
-      // In-Air Leap Posture
-      this.runnerRig.spine.position.y = 0.95;
-      this.runnerRig.spine.rotation.x = -0.15;
-      this.runnerRig.head.rotation.x = -0.1;
-      this.runnerRig.leftLeg.rotation.x = -0.6;
-      this.runnerRig.rightLeg.rotation.x = 0.8;
-      this.runnerRig.leftArm.rotation.x = 1.2;
-      this.runnerRig.rightArm.rotation.x = -0.9;
+      // Big Airborne Leap
+      this.motuRig.spine.position.y = 0.85;
+      this.motuRig.spine.rotation.x = -0.15;
+      this.motuRig.head.rotation.x = -0.1;
+      this.motuRig.leftLeg.rotation.x = -0.6;
+      this.motuRig.rightLeg.rotation.x = 0.8;
+      this.motuRig.leftArm.rotation.x = 1.2;
+      this.motuRig.rightArm.rotation.x = -0.9;
     } else {
-      // Running Strides
-      this.runnerRig.spine.position.y = 0.95 + Math.abs(sin) * 0.08;
-      this.runnerRig.spine.rotation.x = 0.18; // Athletic forward lean
-      this.runnerRig.head.rotation.x = 0;
+      // Energetic Chubby Running Strides
+      this.motuRig.spine.position.y = 0.85 + Math.abs(sin) * 0.1;
+      this.motuRig.spine.rotation.x = 0.22; // Motu leans forward enthusiastically
+      this.motuRig.head.rotation.x = Math.sin(this.runCycle) * 0.05;
 
-      this.runnerRig.leftLeg.rotation.x = sin * 0.9;
-      this.runnerRig.rightLeg.rotation.x = -sin * 0.9;
+      this.motuRig.leftLeg.rotation.x = sin * 0.95;
+      this.motuRig.rightLeg.rotation.x = -sin * 0.95;
 
-      this.runnerRig.leftArm.rotation.x = -sin * 0.8;
-      this.runnerRig.rightArm.rotation.x = sin * 0.8;
+      this.motuRig.leftArm.rotation.x = -sin * 0.85;
+      this.motuRig.rightArm.rotation.x = sin * 0.85;
     }
   }
 
+  // Inspector Chingum's Police Quadcopter Pursuit
   private updateDrone(dt: number) {
-    // Drone trails behind player smoothly
     const droneZ = this.playerZ + this.droneDistance;
     this.droneRig.root.position.x = THREE.MathUtils.damp(
       this.droneRig.root.position.x,
@@ -989,17 +1033,15 @@ export class RunnerEngine {
       dt
     );
 
-    // Spin quadrotor blades
     this.droneRig.rotors.forEach((rotor, i) => {
       rotor.rotation.y += (i % 2 === 0 ? 35 : -35) * dt;
     });
 
-    // Flashing red siren
     const time = this.clock.getElapsedTime();
-    const sirenColor = Math.sin(time * 16) > 0 ? 0xff0033 : 0x00f5ff;
-    (this.droneRig.siren.material as THREE.MeshBasicMaterial).color.setHex(sirenColor);
+    const isRed = Math.sin(time * 16) > 0;
+    (this.droneRig.sirenL.material as THREE.MeshBasicMaterial).color.setHex(isRed ? 0xef4444 : 0x1e3a8a);
+    (this.droneRig.sirenR.material as THREE.MeshBasicMaterial).color.setHex(isRed ? 0x1e3a8a : 0x3b82f6);
 
-    // Restore drone distance over time if safe
     this.droneDistance = THREE.MathUtils.damp(
       this.droneDistance,
       this.droneTargetDistance,
@@ -1009,10 +1051,8 @@ export class RunnerEngine {
   }
 
   private updateTrackChunks() {
-    // When player gets near the end of track, recycle oldest chunk behind player
     for (const chunk of this.trackChunks) {
       if (chunk.position.z > this.playerZ + 40) {
-        // Find furthest chunk ahead
         let minZ = this.playerZ;
         for (const c of this.trackChunks) {
           if (c.position.z < minZ) minZ = c.position.z;
@@ -1020,28 +1060,21 @@ export class RunnerEngine {
 
         const newZ = minZ - this.CHUNK_LENGTH;
         chunk.position.z = newZ;
-
-        // Spawn new obstacles & coins on this recycled chunk
         this.spawnTrackSectionEntities(newZ + this.CHUNK_LENGTH / 2, newZ - this.CHUNK_LENGTH / 2);
       }
     }
   }
 
   private updateObstacles(dt: number) {
-    const playerHitboxRadius = 0.45;
-    const playerHeight = this.isSliding ? 0.75 : 1.8;
-
+    const playerHitboxRadius = 0.52; // Slightly wider for Motu's potbelly
     for (let i = this.obstacles.length - 1; i >= 0; i--) {
       const obs = this.obstacles[i];
 
-      // Move moving trains towards player!
       if (obs.speed && obs.speed > 0) {
         obs.group.position.z += obs.speed * dt;
       }
 
       const obsZ = obs.group.position.z;
-
-      // Dispose if far behind
       if (obsZ > this.playerZ + 30) {
         this.scene.remove(obs.group);
         this.obstacles.splice(i, 1);
@@ -1050,44 +1083,30 @@ export class RunnerEngine {
 
       if (obs.hit) continue;
 
-      // Collision Check
-      const sameLane = Math.abs(this.playerX - obs.group.position.x) < 1.1;
+      const sameLane = Math.abs(this.playerX - obs.group.position.x) < 1.15;
       const obsHalfLength = (obs.length || 1.2) / 2;
       const zOverlap = Math.abs(this.playerZ - obsZ) < obsHalfLength + playerHitboxRadius;
 
       if (sameLane && zOverlap) {
-        // Check Obstacle Types:
-        // 1. Train front crash
         if (obs.type === 'TRAIN') {
-          // If player is on roof, no crash!
           if (this.playerY >= 2.5) {
-            continue; // Safely surfing on train roof!
+            continue;
           } else {
             this.handlePlayerHit(obs);
           }
-        }
-        // 2. High Laser (Can slide underneath!)
-        else if (obs.type === 'HIGH_LASER') {
-          // Laser beam starts at y = 1.0m to 2.2m.
-          // If player is sliding, player height is 0.75m -> SAFE!
+        } else if (obs.type === 'HIGH_LASER') {
           if (this.isSliding) {
-            continue; // Successfully slid under!
+            continue;
           } else {
             this.handlePlayerHit(obs);
           }
-        }
-        // 3. Low Barricade (Can jump over!)
-        else if (obs.type === 'LOW_BARRICADE') {
-          // Barricade is height 0.85m.
-          // If player is jumping above 0.95m -> SAFE!
+        } else if (obs.type === 'LOW_BARRICADE') {
           if (this.playerY > 0.95) {
-            continue; // Successfully jumped over!
+            continue;
           } else {
             this.handlePlayerHit(obs);
           }
-        }
-        // 4. Tall Pillar (Must switch lane)
-        else if (obs.type === 'TALL_PILLAR') {
+        } else if (obs.type === 'TALL_PILLAR') {
           this.handlePlayerHit(obs);
         }
       }
@@ -1097,31 +1116,26 @@ export class RunnerEngine {
   private handlePlayerHit(obs: ObstacleEntity) {
     obs.hit = true;
 
-    // If player has Rocket Boost active, smash right through obstacle!
-    if (this.boostTimer > 0) {
+    if (this.boostTimer > 0 || this.samosaBoostTimer > 0) {
       sound.playCrash();
       this.triggerHitstop(0.04);
       this.triggerCameraShake(0.3);
-      this.spawnCoinSparks(obs.group.position.x, 1.2, obs.group.position.z);
+      this.spawnCoinSparks(obs.group.position.x, 1.2, obs.group.position.z, 0xf59e0b);
       this.scene.remove(obs.group);
       return;
     }
 
-    // If player has Shield active, break shield and survive!
     if (this.shieldTimer > 0) {
       this.shieldTimer = 0;
-      this.runnerRig.shieldMesh.visible = false;
+      this.motuRig.shieldMesh.visible = false;
       sound.playShieldBreak();
       this.triggerHitstop(0.08);
       this.triggerCameraShake(0.5);
       this.spawnFootstepSparks(0);
-
-      // Drone closes in dangerously!
-      this.droneDistance = 2.4;
+      this.droneDistance = 2.2;
       return;
     }
 
-    // Fatal Crash: Game Over!
     this.gameOver();
   }
 
@@ -1130,11 +1144,8 @@ export class RunnerEngine {
 
     for (let i = this.coinEntities.length - 1; i >= 0; i--) {
       const coin = this.coinEntities[i];
-
-      // Spin coin
       coin.group.rotation.y += dt * 5;
 
-      // Dispose if behind
       if (coin.z > this.playerZ + 20) {
         this.scene.remove(coin.group);
         this.coinEntities.splice(i, 1);
@@ -1148,20 +1159,29 @@ export class RunnerEngine {
       const dz = this.playerZ - coin.z;
       const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
-      // Magnet Pull
       if (this.magnetTimer > 0 && dist < magnetRadius) {
         coin.group.position.x += dx * dt * 8;
         coin.group.position.y += dy * dt * 8;
         coin.group.position.z += dz * dt * 8;
       }
 
-      // Collect Check
-      if (dist < 1.4) {
+      if (dist < 1.45) {
         coin.collected = true;
-        this.coins += 1 * this.multiplier;
-        this.score += 50 * this.multiplier;
-        sound.playCoin();
-        this.spawnCoinSparks(coin.group.position.x, coin.y, coin.z);
+
+        if (coin.isSamosa) {
+          // Motu's Crispy Samosa Grab!
+          this.samosas++;
+          this.score += 200 * this.activeMultiplier;
+          this.samosaBoostTimer = 6;
+          sound.playSamosa();
+          this.spawnCoinSparks(coin.group.position.x, coin.y, coin.z, 0xffbb00);
+        } else {
+          this.coins += 1 * this.activeMultiplier;
+          this.score += 50 * this.activeMultiplier;
+          sound.playCoin();
+          this.spawnCoinSparks(coin.group.position.x, coin.y, coin.z, 0xffd700);
+        }
+
         this.scene.remove(coin.group);
         this.coinEntities.splice(i, 1);
       }
@@ -1171,8 +1191,6 @@ export class RunnerEngine {
   private updatePowerups(dt: number) {
     for (let i = this.powerupEntities.length - 1; i >= 0; i--) {
       const p = this.powerupEntities[i];
-
-      // Floating bob and spin
       p.group.rotation.y += dt * 3.5;
       p.group.position.y = p.y + Math.sin(this.clock.getElapsedTime() * 4) * 0.15;
 
@@ -1196,7 +1214,15 @@ export class RunnerEngine {
     }
   }
 
-  private activatePowerup(type: 'magnet' | 'shield' | 'boost' | 'multiplier') {
+  private activatePowerup(type: 'magnet' | 'shield' | 'boost' | 'multiplier' | 'samosa') {
+    if (type === 'samosa' || type === 'boost') {
+      this.samosas++;
+      this.samosaBoostTimer = 7;
+      sound.playSamosa();
+      this.triggerCameraShake(0.35);
+      return;
+    }
+
     sound.playPowerup();
     this.triggerCameraShake(0.2);
 
@@ -1204,13 +1230,9 @@ export class RunnerEngine {
       this.magnetTimer = 10;
     } else if (type === 'shield') {
       this.shieldTimer = 15;
-    } else if (type === 'boost') {
-      this.boostTimer = 6;
-      this.verticalVelocity = 0;
-      this.isGrounded = true;
     } else if (type === 'multiplier') {
       this.multiplierTimer = 12;
-      this.multiplier = 2;
+      this.activeMultiplier = 2;
     }
   }
 
@@ -1228,15 +1250,15 @@ export class RunnerEngine {
       p.mesh.position.x += p.vx * dt;
       p.mesh.position.y += p.vy * dt;
       p.mesh.position.z += p.vz * dt;
-      p.vy -= 9.8 * dt; // Particle gravity
+      p.vy -= 9.8 * dt;
 
       const progress = p.life / p.maxLife;
       p.mesh.scale.setScalar(1 - progress);
     }
   }
 
+  // Realistic Dynamic Camera with Speed Warp FOV
   private updateCamera(dt: number) {
-    // Camera follow with dynamic lag & cinematic elevation
     const targetCamX = this.playerX * 0.45;
     const targetCamY = Math.max(this.playerY + 3.8, 3.8);
     const targetCamZ = this.playerZ + 6.8;
@@ -1245,7 +1267,18 @@ export class RunnerEngine {
     this.camera.position.y = THREE.MathUtils.damp(this.camera.position.y, targetCamY, 12, dt);
     this.camera.position.z = THREE.MathUtils.damp(this.camera.position.z, targetCamZ, 20, dt);
 
-    // Apply Camera Shake
+    // Realistic Speed Warp FOV (expands up to 74 degrees on Hard mode or Turbo Samosa!)
+    const targetFov = this.baseFov + (this.currentSpeed - 24) * 0.55;
+    this.camera.fov = THREE.MathUtils.damp(this.camera.fov, Math.min(targetFov, 76), 6, dt);
+    this.camera.updateProjectionMatrix();
+
+    // High Speed Vibration / Rumble on Hard mode
+    if (this.difficulty === 'HARD' && this.currentSpeed > 32) {
+      const rumble = (this.currentSpeed - 32) * 0.003;
+      this.camera.position.x += (Math.random() - 0.5) * rumble;
+      this.camera.position.y += (Math.random() - 0.5) * rumble;
+    }
+
     if (this.cameraShakeIntensity > 0) {
       this.camera.position.x += (Math.random() - 0.5) * this.cameraShakeIntensity;
       this.camera.position.y += (Math.random() - 0.5) * this.cameraShakeIntensity;
@@ -1269,9 +1302,13 @@ export class RunnerEngine {
   }
 
   private emitStats() {
-    let activePowerupType: 'magnet' | 'shield' | 'boost' | 'multiplier' | null = null;
+    let activePowerupType: 'magnet' | 'shield' | 'boost' | 'multiplier' | 'samosa' | null = null;
     let maxRemaining = 0;
 
+    if (this.samosaBoostTimer > maxRemaining) {
+      activePowerupType = 'samosa';
+      maxRemaining = this.samosaBoostTimer;
+    }
     if (this.boostTimer > maxRemaining) {
       activePowerupType = 'boost';
       maxRemaining = this.boostTimer;
@@ -1293,9 +1330,11 @@ export class RunnerEngine {
       this.onStatsUpdate({
         score: this.score,
         coins: this.coins,
+        samosas: this.samosas,
         distance: Math.floor(this.distance),
-        multiplier: this.multiplier,
-        speed: Math.floor(this.currentSpeed * 3.6), // km/h
+        multiplier: Math.round(this.baseMultiplier * this.activeMultiplier * 10) / 10,
+        speed: Math.floor(this.currentSpeed * 3.6),
+        difficulty: this.difficulty,
         activePowerup: {
           type: activePowerupType,
           remaining: maxRemaining,
@@ -1305,9 +1344,7 @@ export class RunnerEngine {
     }
   }
 
-  // State Transitions
   public startRun() {
-    // Clear existing entities
     this.obstacles.forEach((o) => this.scene.remove(o.group));
     this.coinEntities.forEach((c) => this.scene.remove(c.group));
     this.powerupEntities.forEach((p) => this.scene.remove(p.group));
@@ -1318,25 +1355,24 @@ export class RunnerEngine {
     this.powerupEntities = [];
     this.particles = [];
 
-    // Reset scores & speeds
     this.score = 0;
     this.coins = 0;
+    this.samosas = 0;
     this.distance = 0;
-    this.multiplier = 1;
-    this.currentSpeed = this.baseSpeed;
+    this.activeMultiplier = 1;
     this.boostTimer = 0;
+    this.samosaBoostTimer = 0;
     this.magnetTimer = 0;
     this.shieldTimer = 0;
     this.multiplierTimer = 0;
 
+    this.applyDifficultyParameters();
     this.resetPlayerPosition();
 
-    // Rebuild track around 0
     this.trackChunks.forEach((chunk, i) => {
       chunk.position.z = 20 - i * this.CHUNK_LENGTH;
     });
 
-    // Populate initial entities ahead of player
     this.spawnTrackSectionEntities(-20, -180);
 
     this.state = 'PLAYING';
@@ -1367,11 +1403,9 @@ export class RunnerEngine {
     this.triggerHitstop(0.08);
     this.triggerCameraShake(0.8);
 
-    // Tumble ragdoll rotation
-    this.runnerRig.root.rotation.x = Math.PI / 2;
-    this.runnerRig.root.position.y = 0.2;
+    this.motuRig.root.rotation.x = Math.PI / 2;
+    this.motuRig.root.position.y = 0.2;
 
-    // Check new high score
     if (this.score > this.highScore) {
       this.highScore = this.score;
       try {
@@ -1384,21 +1418,6 @@ export class RunnerEngine {
 
   public getState(): GameState {
     return this.state;
-  }
-
-  public getStats(): GameStats {
-    return {
-      score: this.score,
-      coins: this.coins,
-      distance: Math.floor(this.distance),
-      multiplier: this.multiplier,
-      speed: Math.floor(this.currentSpeed * 3.6),
-      activePowerup: {
-        type: null,
-        remaining: 0,
-      },
-      highScore: this.highScore,
-    };
   }
 
   public dispose() {
